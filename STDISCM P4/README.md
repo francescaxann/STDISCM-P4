@@ -1,6 +1,6 @@
 # Distributed Online Enrollment System
 
-This workspace implements a runnable seven-container enrollment cluster using Flask MVC, Python gRPC, PostgreSQL streaming replication, JWTs, row-locking, and fault-isolation patterns.
+This workspace implements a runnable seven-container enrollment cluster using Flask MVC, Python gRPC, PostgreSQL streaming replication, JWTs, row-locking, and fault-isolation patterns. :DDD by Francesca Catolico & Vaughn Sy 
 
 ## Topology
 

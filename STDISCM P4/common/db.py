@@ -2,7 +2,7 @@ import os
 import time
 from contextlib import contextmanager
 from psycopg2.pool import ThreadedConnectionPool
-from psycopg2 import OperationalError
+from psycopg2 import OperationalError, InterfaceError
 
 
 def pool(host, db="enrollment", user="postgres", password="postgres", minconn=2, maxconn=10, retries=30):
@@ -45,9 +45,26 @@ class LazyReplicaPool:
         return self.pool
 
 
+def _healthy_conn(pool_obj, attempts=3):
+    """Borrow a connection, discarding pooled ones that died (e.g. after a DB restart or failover)."""
+    for _ in range(attempts):
+        conn = pool_obj.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+            conn.rollback()
+            return conn
+        except (OperationalError, InterfaceError):
+            try:
+                pool_obj.putconn(conn, close=True)
+            except Exception:
+                pass
+    return pool_obj.getconn()
+
+
 @contextmanager
 def connection(pool_obj):
-    conn = pool_obj.getconn()
+    conn = _healthy_conn(pool_obj)
     try:
         yield conn
     except OperationalError:

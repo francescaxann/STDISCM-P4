@@ -51,13 +51,27 @@ class Auth(enrollment_pb2_grpc.AuthServiceServicer):
     def ValidateToken(self, req, context):
         try:
             claims=jwt.decode(req.token,public_key,algorithms=["RS256"])
-            with connection(primary) as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT 1 FROM revoked_tokens WHERE jti=%s",(claims["jti"],))
-                    if cur.fetchone(): raise ValueError("revoked")
-            return enrollment_pb2.ValidateResponse(valid=True,user_id=claims["sub"],role=claims["role"])
-        except Exception:
+        except jwt.PyJWTError:
             return enrollment_pb2.ValidateResponse(valid=False)
+        revoked=None
+        for p in (primary, replica.get()):
+            if p is None:
+                continue
+            try:
+                with connection(p) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT 1 FROM revoked_tokens WHERE jti=%s",(claims["jti"],))
+                        revoked=cur.fetchone() is not None
+                break
+            except Exception:
+                if p is not primary:
+                    replica.pool=None
+        if revoked is None:
+            # DB unreachable: say so, so the view falls back to local JWT verification
+            context.abort(grpc.StatusCode.UNAVAILABLE,"Revocation list unavailable")
+        if revoked:
+            return enrollment_pb2.ValidateResponse(valid=False)
+        return enrollment_pb2.ValidateResponse(valid=True,user_id=claims["sub"],role=claims["role"])
 
 server=grpc.server(futures.ThreadPoolExecutor(max_workers=10),interceptors=(JWTServerInterceptor(),))
 enrollment_pb2_grpc.add_AuthServiceServicer_to_server(Auth(),server)
