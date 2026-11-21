@@ -1,0 +1,93 @@
+services:
+  db-primary:
+    image: postgres:16
+    container_name: db-primary
+    hostname: db-primary
+    environment:
+      POSTGRES_DB: enrollment
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    command: ["postgres","-c","wal_level=replica","-c","max_wal_senders=10","-c","max_replication_slots=10","-c","hot_standby=on","-c","listen_addresses=*","-c","password_encryption=md5","-c","hba_file=/var/lib/postgresql/pg_hba.conf"]
+    volumes:
+      - db-primary-data:/var/lib/postgresql/data
+      - ./db/pg_hba.conf:/var/lib/postgresql/pg_hba.conf:ro
+      - ./db/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+      - ./db/replication.sql:/docker-entrypoint-initdb.d/20-replication.sql:ro
+    networks:
+      enrollment-net:
+        ipv4_address: 172.28.0.10
+    ports: ["5432:5432"]
+
+  db-replica:
+    image: postgres:16
+    container_name: db-replica
+    hostname: db-replica
+    user: root
+    environment:
+      POSTGRES_PASSWORD: postgres
+      PGUSER: postgres
+      PGPASSWORD: replica_password
+    entrypoint: ["/bin/bash","-c","apt-get update >/dev/null 2>&1 && apt-get install -y --no-install-recommends gosu >/dev/null 2>&1; until pg_isready -h db-primary -p 5432 -U postgres; do sleep 2; done; if [[ ! -f /var/lib/postgresql/data/standby.signal ]]; then rm -rf /var/lib/postgresql/data/*; gosu postgres bash -c \"PGPASSWORD=replica_password pg_basebackup -h db-primary -D /var/lib/postgresql/data -U replicator -Fp -Xs -P -R\"; fi; exec gosu postgres postgres"]
+    depends_on: [db-primary]
+    volumes:
+      - db-replica-data:/var/lib/postgresql/data
+    networks:
+      enrollment-net:
+        ipv4_address: 172.28.0.11
+    ports: ["5433:5432"]
+
+  auth-node:
+    build: {context: ., dockerfile: auth-node/Dockerfile}
+    hostname: auth-node
+    environment: {DB_PRIMARY: db-primary, JWT_SECRET: dev-enrollment-secret}
+    depends_on: [db-primary]
+    networks:
+      enrollment-net: {ipv4_address: 172.28.0.20}
+    ports: ["50051:50051"]
+
+  course-node:
+    build: {context: ., dockerfile: course-node/Dockerfile}
+    hostname: course-node
+    environment: {DB_PRIMARY: db-primary, DB_REPLICA: db-replica, AUDIT_HOST: audit-node}
+    depends_on: [db-primary, db-replica, audit-node]
+    networks:
+      enrollment-net: {ipv4_address: 172.28.0.21}
+    ports: ["50052:50052"]
+
+  grade-node:
+    build: {context: ., dockerfile: grade-node/Dockerfile}
+    hostname: grade-node
+    environment: {DB_PRIMARY: db-primary, DB_REPLICA: db-replica, AUDIT_HOST: audit-node}
+    depends_on: [db-primary, db-replica, audit-node]
+    networks:
+      enrollment-net: {ipv4_address: 172.28.0.22}
+    ports: ["50053:50053"]
+
+  audit-node:
+    build: {context: ., dockerfile: audit-node/Dockerfile}
+    hostname: audit-node
+    environment: {DB_PRIMARY: db-primary}
+    depends_on: [db-primary]
+    networks:
+      enrollment-net: {ipv4_address: 172.28.0.23}
+    ports: ["50054:50054"]
+
+  view-node:
+    build: {context: ., dockerfile: view-node/Dockerfile}
+    hostname: view-node
+    environment: {AUTH_HOST: auth-node, COURSE_HOST: course-node, GRADE_HOST: grade-node, JWT_SECRET: dev-enrollment-secret}
+    depends_on: [auth-node, course-node, grade-node]
+    networks:
+      enrollment-net: {ipv4_address: 172.28.0.2}
+    ports: ["8080:8080"]
+
+volumes:
+  db-primary-data:
+  db-replica-data:
+
+networks:
+  enrollment-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
