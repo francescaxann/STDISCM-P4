@@ -1,0 +1,56 @@
+syntax = "proto3";
+package enrollment;
+
+service AuthService {
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc Logout (LogoutRequest) returns (LogoutResponse);
+  rpc ValidateToken (ValidateRequest) returns (ValidateResponse);
+}
+service CourseService {
+  rpc GetOpenCourses (CoursesRequest) returns (CoursesResponse);
+  rpc EnrollStudent (EnrollRequest) returns (EnrollResponse);
+}
+service GradeService {
+  rpc GetStudentGrades (GradesRequest) returns (GradesResponse);
+  rpc UploadGrade (UploadGradeRequest) returns (UploadGradeResponse);
+}
+service AuditService {
+  rpc LogEvent (AuditEvent) returns (AuditResponse);
+  rpc CreateReceipt (Receipt) returns (ReceiptResponse);
+  rpc GetReceipt (ReceiptKey) returns (Receipt);
+  rpc ListReceipts (ReceiptFilter) returns (ReceiptList);
+  rpc UpdateReceipt (Receipt) returns (ReceiptResponse);
+  rpc DeleteReceipt (ReceiptKey) returns (ReceiptResponse);
+}
+
+message LoginRequest { string username = 1; string password = 2; }
+message LoginResponse { bool success = 1; string token = 2; string message = 3; }
+message LogoutRequest { string token = 1; }
+message LogoutResponse { bool success = 1; }
+message ValidateRequest { string token = 1; }
+message ValidateResponse { bool valid = 1; string user_id = 2; string role = 3; }
+
+message CoursesRequest { string user_id = 1; string role = 2; }
+message Course { int32 id = 1; string code = 2; string title = 3; int32 slots_available = 4; }
+message CoursesResponse { repeated Course courses = 1; }
+message EnrollRequest { string user_id = 1; string role = 2; int32 course_id = 3; }
+message EnrollResponse { bool success = 1; string message = 2; }
+
+message GradesRequest { string user_id = 1; string role = 2; }
+message Grade { int32 course_id = 1; string course_code = 2; string course_title = 3; string grade = 4; string student_name = 5; string student_id = 6; }
+message GradesResponse { repeated Grade grades = 1; }
+message UploadGradeRequest { string user_id = 1; string role = 2; string student_id = 3; int32 course_id = 4; string grade = 5; }
+message UploadGradeResponse { bool success = 1; string message = 2; }
+message AuditEvent { string event_type = 1; string actor_id = 2; string details = 3; }
+message AuditResponse { bool accepted = 1; }
+message Receipt {
+  int32 id = 1;
+  string student_id = 2;
+  int32 course_id = 3;
+  string status = 4;
+  string details = 5;
+}
+message ReceiptResponse { bool success = 1; string message = 2; int32 id = 3; }
+message ReceiptKey { int32 id = 1; }
+message ReceiptFilter { string student_id = 1; }
+message ReceiptList { repeated Receipt receipts = 1; }
