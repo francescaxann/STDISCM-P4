@@ -1,0 +1,16 @@
+{% extends 'base.html' %}{% block content %}
+<h1>Acknowledgment Receipts</h1>
+{% if warning %}<p class="warning">{{warning}}</p>{% endif %}
+<form method="post" action="/receipts">
+<input name="course_id" type="number" placeholder="Course ID" required>
+<input name="status" value="CREATED">
+<input name="details" placeholder="Details">
+<button>Create</button>
+</form>
+<div class="cards">
+{% for r in receipts %}<div class="card">
+<h3>Receipt #{{r.id}}</h3><p>Status: {{r.status}}</p><p>{{r.details}}</p>
+<form method="post" action="/receipts/{{r.id}}/update"><input name="status" value="UPDATED"><input name="details"><button>Update</button></form>
+<form method="post" action="/receipts/{{r.id}}/delete"><button>Delete</button></form>
+</div>{% else %}<p>No receipts.</p>{% endfor %}
+</div>{% endblock %}
